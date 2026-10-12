@@ -1,0 +1,12 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: finpipe_erp
+    env_file: .env
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - erp_data:/var/lib/postgresql/data
+
+volumes:
+  erp_data:
