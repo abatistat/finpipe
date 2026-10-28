@@ -23,12 +23,19 @@ flowchart LR
 ## Status
 
 - [x] **Phase 1: Fake ERP.** Postgres in Docker with customers, products, invoices, invoice lines and payments. A seeded generator creates 2024–2026 history (3,000 invoices, ~9,000 lines, ~3,300 payments) and can be re-run safely.
-- [ ] **Phase 2: Extract & load.** Postgres to DuckDB, full load first, then incremental.
+- [x] **Phase 2: Extract & load.** Postgres to DuckDB `raw` schema. A full load, and an incremental load that only moves new or changed rows.
 - [ ] **Phase 3: Modeling with dbt.** Staging, star schema, monthly P&L vs budget.
 - [ ] **Phase 4: Data quality.** dbt tests and reconciliations.
 - [ ] **Phase 5: Orchestration.** Daily Airflow DAG.
 - [ ] **Phase 6: Cloud.** Same pipeline on BigQuery.
 - [ ] **Phase 7: Performance & dashboard.**
+
+## How the incremental load works
+
+- A migration adds an `actualizado_en` timestamp to every ERP table. New rows get it by default; a trigger refreshes it on every update.
+- DuckDB keeps a watermark per table: the latest `actualizado_en` already loaded. Each run asks Postgres only for rows after it.
+- Incoming rows are merged by primary key (delete + insert) inside a transaction, so a modified invoice replaces its old version instead of duplicating it.
+- Deletes are not captured. The ERP never hard-deletes invoices; it voids them (`estado = 'anulada'`), which arrives as a regular update.
 
 ## Stack
 
@@ -39,11 +46,14 @@ Python · PostgreSQL · Docker · DuckDB · dbt · Airflow · BigQuery
 Requires Docker and Python 3.12.
 
 ```bash
+cp .env.example .env            # then set your own POSTGRES_PASSWORD
 docker compose up -d
 uv venv && source .venv/bin/activate
-uv pip install pandas sqlalchemy psycopg2-binary faker requests python-dotenv dbt-duckdb
+uv pip install -r requirements.txt
 docker exec -i finpipe_erp psql -U erp -d erp < generator/schema.sql
+docker exec -i finpipe_erp psql -U erp -d erp < generator/migrations/001_add_actualizado_en.sql
 python generator/generate.py
+python -m extract.extract_incremental   # first run is a full copy; later runs are incremental
 ```
 
 ## Early findings
