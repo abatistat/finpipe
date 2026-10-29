@@ -1,0 +1,25 @@
+name: 'finpipe'
+version: '1.0.0'
+
+# Connection profile defined in profiles.yml
+profile: 'finpipe'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  finpipe:
+    # Staging: one cleaned model per raw table, built as views
+    staging:
+      +materialized: view
+    # Marts: business-ready tables (later in Phase 3)
+    marts:
+      +materialized: table

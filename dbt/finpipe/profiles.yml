@@ -1,0 +1,7 @@
+finpipe:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ../../data/finpipe.duckdb
+      threads: 4

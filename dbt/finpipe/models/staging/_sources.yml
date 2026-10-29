@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: erp
+    description: "ERP tables copied from Postgres by the extract scripts."
+    schema: raw
+    tables:
+      - name: clientes
+      - name: productos
+      - name: facturas
+      - name: lineas_factura
+      - name: pagos
