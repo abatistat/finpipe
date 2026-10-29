@@ -24,7 +24,7 @@ flowchart LR
 
 - [x] **Phase 1: Fake ERP.** Postgres in Docker with customers, products, invoices, invoice lines and payments. A seeded generator creates 2024–2026 history (3,000 invoices, ~9,000 lines, ~3,300 payments) and can be re-run safely.
 - [x] **Phase 2: Extract & load.** Postgres to DuckDB `raw` schema. A full load, and an incremental load that only moves new or changed rows.
-- [ ] **Phase 3: Modeling with dbt.** Staging, star schema, monthly P&L vs budget.
+- [ ] **Phase 3: Modeling with dbt.** *In progress.* The staging layer and a first star schema are done, and they tie out to the source. Next up: the monthly P&L against budget.
 - [ ] **Phase 4: Data quality.** dbt tests and reconciliations.
 - [ ] **Phase 5: Orchestration.** Daily Airflow DAG.
 - [ ] **Phase 6: Cloud.** Same pipeline on BigQuery.
@@ -36,6 +36,16 @@ flowchart LR
 - DuckDB keeps a watermark per table: the latest `actualizado_en` already loaded. Each run asks Postgres only for rows after it.
 - Incoming rows are merged by primary key (delete + insert) inside a transaction, so a modified invoice replaces its old version instead of duplicating it.
 - Deletes are not captured. The ERP never hard-deletes invoices; it voids them (`estado = 'anulada'`), which arrives as a regular update.
+
+## How the data gets modeled
+
+dbt picks up where the extract leaves off, in two layers.
+
+Staging is one view per ERP table, with light cleanup only: proper dates, trimmed text, and money converted from `DOUBLE` to `DECIMAL(18,2)`. That last one matters more than it sounds. Floating-point numbers drift by fractions of a cent, and across thousands of invoices that's enough to make a reconciliation not tie.
+
+Marts are the business-ready tables, built as a star schema. `fct_ventas` has one row per invoice line with gross, discount, net, cost and margin, and `dim_clientes` and `dim_productos` describe who bought what. Voided invoices stay in, flagged with `es_anulada`, so each report decides whether to leave them out instead of the data quietly hiding them.
+
+Before trusting any of it, I checked it the way I'd check a P&L: every staging model matches its raw table row for row, and net sales by year match what I got querying the ERP directly ($19.9M in 2024, $25.4M in 2025, $18.0M so far in 2026), with gross margin holding around 41%.
 
 ## Stack
 
@@ -54,6 +64,7 @@ docker exec -i finpipe_erp psql -U erp -d erp < generator/schema.sql
 docker exec -i finpipe_erp psql -U erp -d erp < generator/migrations/001_add_actualizado_en.sql
 python generator/generate.py
 python -m extract.extract_incremental   # first run is a full copy; later runs are incremental
+(cd dbt/finpipe && dbt run)            # builds staging views and marts
 ```
 
 ## Early findings
